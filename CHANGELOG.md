@@ -13,6 +13,11 @@ Improvements:
 - Disable busy-wait in BEAM to reduce CPU usage (thanks [Jason Axelson](https://github.com/axelson)) [#331](https://github.com/elixir-lsp/elixir-ls/pull/331)
 - Update HoverProvider to return MarkupContent (thanks [Jonathan Arnett](https://github.com/J3RN)) [#342](https://github.com/elixir-lsp/elixir-ls/pull/342)
 
+Bug Fixes:
+- Fix issue with formatting and deps handling (thanks [Thanabodee Charoenpiriyakij](https://github.com/wingyplus)) [#345](https://github.com/elixir-lsp/elixir-ls/pull/345)
+  - This would manifest as `** (Mix.Error) Unknown dependency :ecto_sql given to :import_deps in the formatter configuration.`
+- Fix formatting files in umbrella projects (thanks [Drew Olson](https://github.com/drewolson))[#350](https://github.com/elixir-lsp/elixir-ls/pull/350)
+
 House keeping:
 - Use error tolerant parser for WorkspaceSymbols (thanks [Łukasz Samson](https://github.com/lukaszsamson)) [#322](https://github.com/elixir-lsp/elixir-ls/pull/322)
 - Fix the link in the README to releases (thanks [RJ Dellecese](https://github.com/rjdellecese)) [#312](https://github.com/elixir-lsp/elixir-ls/pull/312)
@@ -20,6 +25,8 @@ House keeping:
 - Add vim-lsp to plugin list (thanks [Thanabodee Charoenpiriyakij](https://github.com/wingyplus)) [#340](https://github.com/elixir-lsp/elixir-ls/pull/340)
 - Cleanup test output (thanks [Jason Axelson](https://github.com/axelson)) [#347](https://github.com/elixir-lsp/elixir-ls/pull/347)
 - Remove the default .tool-versions file (thanks [Jason Axelson](https://github.com/axelson)) [#351](https://github.com/elixir-lsp/elixir-ls/pull/351)
+- Fix up the test suite (thanks [Jason Axelson](https://github.com/axelson)) [#352](https://github.com/elixir-lsp/elixir-ls/pull/352)
+  - And re-enable dialyzer [#354](https://github.com/elixir-lsp/elixir-ls/pull/354)
 
 Note: `MIX_TARGET` support was added in 0.5.0 but wasn't added to the changelog until later:
 - Support `MIX_TARGET` so the language server can have target specific contexts, like with Nerves (thanks [Jon Carstens](https://github.com/jjcarstens)) [#299](https://github.com/elixir-lsp/elixir-ls/pull/299)
@@ -27,6 +34,7 @@ Note: `MIX_TARGET` support was added in 0.5.0 but wasn't added to the changelog 
 VSCode:
 - Debugger does not successfully launch on Windows (thanks [Craig Tataryn](https://github.com/ctataryn)) [#115](https://github.com/elixir-lsp/vscode-elixir-ls/pull/115)
 - Add support to highlight octal numbers correctly (thanks [Thanabodee Charoenpiriyakij](https://github.com/wingyplus)) [#128](https://github.com/elixir-lsp/vscode-elixir-ls/pull/128)
+- Add support to highlight binary numbers correctly (thanks [Thanabodee Charoenpiriyakij](https://github.com/wingyplus)) [#133](https://github.com/elixir-lsp/vscode-elixir-ls/pull/133)
 
 ### v0.5.0: 28 June 2020
 
