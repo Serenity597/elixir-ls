@@ -1,5 +1,12 @@
 ### Unreleased
 
+Improvements:
+- Add setup.bat support for windows (thanks [E14](https://github.com/E14)) [#374](https://github.com/elixir-lsp/elixir-ls/pull/374)
+
+Bug Fixes:
+- Fix formatting on windows (thanks [Po Chen](https://github.com/princemaple)) [#375](https://github.com/elixir-lsp/elixir-ls/pull/375)
+- Improve formatting speed (thanks [Matt Baker](https://github.com/mattbaker)) [#390](https://github.com/elixir-lsp/elixir-ls/pull/390)
+
 ### v0.6.1: 4 October 2020
 
 VSCode:
