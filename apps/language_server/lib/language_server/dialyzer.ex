@@ -125,8 +125,11 @@ defmodule ElixirLS.LanguageServer.Dialyzer do
       if not is_nil(state.build_ref) do
         do_analyze(state)
       else
-        if state.write_manifest_pid, do: Process.exit(state.write_manifest_pid, :kill)
-        pid = Manifest.write(state.root_path, active_plt, mod_deps, md5, warnings, timestamp)
+        maybe_cancel_write_manifest(state)
+
+        {:ok, pid} =
+          Manifest.write(state.root_path, active_plt, mod_deps, md5, warnings, timestamp)
+
         %{state | write_manifest_pid: pid}
       end
 
@@ -187,9 +190,9 @@ defmodule ElixirLS.LanguageServer.Dialyzer do
 
   ## Helpers
 
-  defp do_analyze(%{write_manifest_pid: write_manifest_pid} = state) do
+  defp do_analyze(state) do
     # Cancel writing to the manifest, since we'll end up overwriting it anyway
-    if is_pid(write_manifest_pid), do: Process.exit(write_manifest_pid, :cancelled)
+    maybe_cancel_write_manifest(state)
 
     parent = self()
     analysis_pid = spawn_link(fn -> compile(parent, state) end)
@@ -211,10 +214,20 @@ defmodule ElixirLS.LanguageServer.Dialyzer do
     prev_paths = Map.keys(md5) |> MapSet.new()
 
     # FIXME: Private API
+    consolidation_path = Mix.Project.consolidation_path()
+
+    consolidated_protocol_beams =
+      for path <- Path.join(consolidation_path, "*.beam") |> Path.wildcard(),
+          into: MapSet.new(),
+          do: Path.basename(path)
+
+    # FIXME: Private API
     all_paths =
-      Mix.Utils.extract_files([Mix.Project.build_path()], [:beam])
-      |> Enum.map(&Path.relative_to_cwd(&1))
-      |> MapSet.new()
+      for path <- Mix.Utils.extract_files([Mix.Project.build_path()], [:beam]),
+          Path.basename(path) not in consolidated_protocol_beams or
+            Path.dirname(path) == consolidation_path,
+          into: MapSet.new(),
+          do: Path.relative_to_cwd(path)
 
     removed =
       prev_paths
@@ -373,12 +386,12 @@ defmodule ElixirLS.LanguageServer.Dialyzer do
         mod_deps = update_mod_deps(mod_deps, new_mod_deps, removed_modules)
         warnings = add_warnings(warnings, raw_warnings)
 
+        md5 = Map.drop(md5, removed_files)
+
         md5 =
           for {file, {_, hash}} <- file_changes, into: md5 do
             {file, hash}
           end
-
-        md5 = remove_files(md5, removed_files)
 
         {active_plt, mod_deps, md5, warnings}
       end)
@@ -392,14 +405,11 @@ defmodule ElixirLS.LanguageServer.Dialyzer do
   end
 
   defp update_mod_deps(mod_deps, new_mod_deps, removed_modules) do
-    mod_deps
-    |> Map.merge(new_mod_deps)
-    |> Map.drop(removed_modules)
-    |> Map.new(fn {mod, deps} -> {mod, deps -- removed_modules} end)
-  end
-
-  defp remove_files(md5, removed_files) do
-    Map.drop(md5, removed_files)
+    for {mod, deps} <- mod_deps,
+        mod not in removed_modules,
+        into: new_mod_deps do
+      {mod, deps -- removed_modules}
+    end
   end
 
   defp add_warnings(warnings, raw_warnings) do
@@ -526,5 +536,12 @@ defmodule ElixirLS.LanguageServer.Dialyzer do
   defp adjusted_timestamp do
     seconds = :calendar.datetime_to_gregorian_seconds(:calendar.universal_time())
     :calendar.gregorian_seconds_to_datetime(seconds - 1)
+  end
+
+  defp maybe_cancel_write_manifest(%{write_manifest_pid: nil}), do: :ok
+
+  defp maybe_cancel_write_manifest(%{write_manifest_pid: pid}) do
+    Process.unlink(pid)
+    Process.exit(pid, :kill)
   end
 end

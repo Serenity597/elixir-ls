@@ -124,7 +124,9 @@ defmodule ElixirLS.LanguageServer.Server do
         {:reply, Dialyzer.suggest_contracts([SourceFile.path_from_uri(uri)]), state}
 
       _ ->
-        {:noreply, %{state | awaiting_contracts: [{from, uri} | state.awaiting_contracts]}}
+        awaiting_contracts = reject_awaiting_contracts(state.awaiting_contracts, uri)
+
+        {:noreply, %{state | awaiting_contracts: [{from, uri} | awaiting_contracts]}}
     end
   end
 
@@ -339,11 +341,7 @@ defmodule ElixirLS.LanguageServer.Server do
 
       state
     else
-      awaiting_contracts =
-        Enum.reject(state.awaiting_contracts, fn
-          {from, ^uri} -> GenServer.reply(from, [])
-          _ -> false
-        end)
+      awaiting_contracts = reject_awaiting_contracts(state.awaiting_contracts, uri)
 
       %{
         state
@@ -689,12 +687,23 @@ defmodule ElixirLS.LanguageServer.Server do
   defp handle_request(code_lens_req(_id, uri), state) do
     source_file = get_source_file(state, uri)
 
-    if dialyzer_enabled?(state) and !!state.settings["suggestSpecs"] do
-      {:async, fn -> CodeLens.code_lens(state.server_instance_id, uri, source_file.text) end,
-       state}
-    else
-      {:error, :invalid_request, "suggestSpecs is disabled", state}
+    fun = fn ->
+      with {:ok, spec_code_lenses} <- get_spec_code_lenses(state, uri, source_file),
+           {:ok, test_code_lenses} <- get_test_code_lenses(state, uri, source_file) do
+        {:ok, spec_code_lenses ++ test_code_lenses}
+      else
+        {:error, %ElixirSense.Core.Metadata{error: {line, error_msg}}} ->
+          {:error, :code_lens_error, "#{line}: #{error_msg}"}
+
+        {:error, error} ->
+          {:error, :code_lens_error, "Error while building code lenses: #{inspect(error)}"}
+
+        error ->
+          error
+      end
     end
+
+    {:async, fun, state}
   end
 
   defp handle_request(execute_command_req(_id, command, args) = req, state) do
@@ -766,6 +775,22 @@ defmodule ElixirLS.LanguageServer.Server do
         "workspaceFolders" => %{"supported" => false, "changeNotifications" => false}
       }
     }
+  end
+
+  defp get_spec_code_lenses(state, uri, source_file) do
+    if dialyzer_enabled?(state) and !!state.settings["suggestSpecs"] do
+      CodeLens.spec_code_lens(state.server_instance_id, uri, source_file.text)
+    else
+      {:ok, []}
+    end
+  end
+
+  defp get_test_code_lenses(state, uri, source_file) do
+    if state.settings["enableTestLenses"] == true do
+      CodeLens.test_code_lens(uri, source_file.text)
+    else
+      {:ok, []}
+    end
   end
 
   # Build
@@ -849,24 +874,20 @@ defmodule ElixirLS.LanguageServer.Server do
 
       {dirty, not_dirty} =
         state.awaiting_contracts
-        |> Enum.filter(fn {_, uri} ->
-          state.source_files[uri] != nil
-        end)
         |> Enum.split_with(fn {_, uri} ->
           state.source_files[uri].dirty?
         end)
 
-      contracts =
+      contracts_by_file =
         not_dirty
-        |> Enum.uniq()
         |> Enum.map(fn {_from, uri} -> SourceFile.path_from_uri(uri) end)
         |> Dialyzer.suggest_contracts()
+        |> Enum.group_by(fn {file, _, _, _, _} -> file end)
 
       for {from, uri} <- not_dirty do
         contracts =
-          Enum.filter(contracts, fn {file, _, _, _, _} ->
-            SourceFile.path_from_uri(uri) == file
-          end)
+          contracts_by_file
+          |> Map.get(SourceFile.path_from_uri(uri), [])
 
         GenServer.reply(from, contracts)
       end
@@ -1059,5 +1080,12 @@ defmodule ElixirLS.LanguageServer.Server do
       source_file ->
         source_file
     end
+  end
+
+  defp reject_awaiting_contracts(awaiting_contracts, uri) do
+    Enum.reject(awaiting_contracts, fn
+      {from, ^uri} -> GenServer.reply(from, [])
+      _ -> false
+    end)
   end
 end
